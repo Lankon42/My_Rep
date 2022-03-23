@@ -9,6 +9,7 @@
 #include<fstream>
 #include <iomanip>
 #include <sstream>
+#include<initializer_list>
 
 class Exception1 : public std::exception{
 	public:
@@ -84,7 +85,8 @@ class matrix{
 	public:
 	std::vector<std::vector<double>> matr;
 	
-	matrix(std::vector<std::vector<double>> vecVec = {{}}); 
+	matrix(std::vector<std::vector<double>> vecVec = {{}});
+	matrix(std::initializer_list<std::vector<double>> list) : matr(list) {} 
 	
 	virtual matrix mul(double Num);
 	virtual matrix Adam(const matrix& M2);
@@ -106,6 +108,8 @@ class matrix{
 	friend matrix operator +(const matrix& M1, const matrix& M2);
 	friend matrix operator -(const matrix& M1, const matrix& M2);
 	friend matrix operator *(const matrix& M1, const matrix& M2);
+	
+	friend class PCA;
 };
 
 
@@ -186,7 +190,24 @@ class symmetric: public matrix
 	friend matrix operator *(const matrix& M1, const matrix& M2);
 };
 
-
+class PCA
+{
+	protected:
+	
+	public:
+	
+	matrix mat;
+	
+	PCA(matrix x): mat(x) {}
+	
+	matrix center();
+	matrix scaling();
+	std::tuple<matrix, matrix, matrix> NIPALS(long PC);
+	std::pair<double, double> dispersion(long PC);
+	matrix leverage(long PC);
+	matrix deviation(long PC);
+	
+};
 
 
 #endif // H_MY_MATH

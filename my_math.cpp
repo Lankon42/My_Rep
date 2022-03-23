@@ -156,12 +156,13 @@ matrix operator *(const matrix& M1, const matrix& M2)
 {
 	if(M1.matr[0].size() != M2.matr.size()) throw Exception1();
 	matrix Tmp; // (n, m)x(m,k)
+	//(n, 1)x(1, n)
 	long M = M1.matr[0].size();
 	long N = M1.matr.size();
 	long K = M2.matr[0].size();
 	Tmp.matr.resize(N);
 	
-	for(long k = 0; k < K; ++k)
+	for(long k = 0; k < N; ++k)
 	{
 		Tmp.matr[k].resize(K);
 	}
@@ -729,4 +730,189 @@ void matrix::writeBin(std::ostream& out)
 	}
 	return;
 }
+// Лабораторная работа №5 ||||||||||||||||||||||||||||||||||||||||||||||||||||||
 
+matrix PCA::center()
+{	
+	long N = this->mat.matr[0].size();//столбцы
+	long M = this->mat.matr.size();
+	
+	matrix Tmp = this->mat;
+	
+	double mid[N] = {0};
+	
+	for(long i = 0; i < N; ++i)
+	{
+		for(long j = 0; j < M; ++j)
+		{
+			mid[i] += this->mat.matr[j][i];
+		}
+		mid[i] = mid[i]/M;
+	}
+	
+	
+	for(long i = 0; i < N; ++i)
+	{
+		for(long j = 0; j < M; ++j)
+		{
+			Tmp.matr[j][i] -= mid[i];
+		}
+	}
+	
+	return Tmp;
+}
+
+matrix PCA::scaling()
+{
+	long N = this->mat.matr[0].size(); // столбцы
+	long M = this->mat.matr.size(); // строки
+	
+	std::vector<double> vec = {0};
+	vec.resize(N);
+	
+	matrix Tmp  = this->mat;
+	
+	double mid[N] = {0};
+	
+	for(long i = 0; i < N; ++i)
+	{
+		for(long j = 0; j < M; ++j)
+		{
+			mid[i] += this->mat.matr[j][i];
+		}
+		mid[i] = mid[i]/M;
+	}
+	
+	for(long i = 0; i < N; ++i)
+	{
+		for(long j = 0; j < M; ++j)
+		{
+			vec[i] += (this->mat.matr[j][i] - mid[i]) * (this->mat.matr[j][i] - mid[i]) / (M - 1);
+		}
+		vec[i] = std::sqrt(vec[i]);
+	}
+	
+	for(long i = 0; i < N; ++i)
+	{
+		for(long j = 0; j < M; ++j)
+		{
+			if(vec[i] != 0)
+				Tmp.matr[j][i] = (Tmp.matr[j][i] - mid[i])/vec[i];
+		}
+	}
+	return Tmp;
+}
+
+
+std::tuple<matrix, matrix, matrix> PCA::NIPALS(long PC)
+{
+	//if(PC < 1 || PC > this->mat.rank()) PC = 1;
+	double eps = 1e-8;
+	PCA D((*this).scaling());
+	//D = D.scaling();
+	matrix E(D.mat.matr);
+	matrix t, t_old;
+	matrix p, d;
+	std::vector<std::vector<double>> Pmatr;
+	//Pmatr.resize(PC);
+	std::vector<std::vector<double>> Tmatr;
+	//Tmatr.resize(PC);
+	
+	for(long h = 0; h < PC; ++h)
+	{
+		t = {(E.transpose()).matr[h]};
+		t = t.transpose();
+		do
+		{
+			p = ((t.transpose() * E).mul(1 / (t.transpose() * t).matr[0][0])).transpose();
+			p = p.mul(1 / p.norm());
+			t_old = t;
+			t = (E * p).mul(1 / (p.transpose() * p).matr[0][0]);
+			d = t_old - t;
+		}
+		while(d.norm() > eps);
+		E = E - t * (p.transpose());
+		//std::cout<< t<< std::endl;
+		//std::cout<< p<< std::endl;
+		Pmatr.push_back(p.transpose().matr[0]);
+		Tmatr.push_back(t.transpose().matr[0]);
+	}
+	matrix P(Pmatr);
+	P = P.transpose();
+	matrix T(Tmatr);
+	T = T.transpose();
+	return std::make_tuple(T, P, E);
+}
+
+matrix PCA::leverage(long PC)
+{
+	//if(PC < 1 || PC > this->mat.rank()) PC = 1;
+	std::tuple<matrix, matrix, matrix> NIPALS_RESULT = this->NIPALS(PC);
+	
+	matrix T = std::get<0>(NIPALS_RESULT);
+	matrix t;
+	std::vector<double> hh;
+	matrix tmp;
+
+	for(long h = 0; h < T.matr.size(); ++h)
+	{
+		t = {T.matr[h]};
+		t = t.transpose();
+		hh.push_back((t.transpose() * ((T.transpose() * T).inverse()) * t).matr[0][0]);
+	}
+	
+	matrix h({hh});
+	h = h.transpose();
+	return h;
+	
+}
+
+matrix PCA::deviation(long PC)
+{
+	if(PC < 1 || PC > this->mat.rank()) PC = 1;
+	std::tuple<matrix, matrix, matrix> NIPALS_RESULT = this->NIPALS(PC);
+	
+	matrix E = std::get<2>(NIPALS_RESULT);
+	
+	std::vector<double> dev;
+	
+	matrix tmp;
+	
+	for(long h = 0; h < E.matr.size(); ++h)
+	{
+		tmp = {E.matr[h]};
+		dev.push_back(tmp.norm() * tmp.norm());
+	}
+	tmp = {dev};
+	tmp = tmp.transpose();
+	return tmp;
+}
+
+std::pair<double, double> PCA::dispersion(long PC)
+{
+	//if(PC < 1 || PC > this->mat.rank()) PC = 1;
+	matrix v = this->deviation(PC);
+	
+	double v0 = 0;
+	long I = v.matr.size();
+	long J = this->mat.matr[0].size();
+	for(int h = 0; h < I; ++h)
+	{
+		v0 += v.matr[h][0] / I;
+	}
+	
+	double TRV = v0 / J;
+	double ERV = 0;
+	
+	matrix X = this->scaling();
+	
+	for(int i = 0; i < I; ++i)
+	{
+		for(int j = 0; j < J; ++j)
+			ERV += X.matr[i][j] * X.matr[i][j];
+	}
+	
+	ERV = 1 - I * v0 / ERV;
+	
+	return std::make_pair(ERV, TRV);
+}
